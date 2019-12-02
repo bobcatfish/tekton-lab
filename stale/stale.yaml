@@ -18,3 +18,14 @@ spec:
     command: ["bash", "-c"]
     args:
       - echo '$(inputs.params.message) $(inputs.resources.repo.revision)'
+  - name: get-issues
+    image: jsternberg/hub
+    workingDir: "$(inputs.resources.repo.path)"
+    command: ["hub"]
+    args: ["issue"]
+    env:
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: webhook-secret
+          key: token

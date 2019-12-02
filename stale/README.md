@@ -17,6 +17,9 @@ The [Tekton Task](https://github.com/tektoncd/pipeline/blob/master/docs/tasks.md
 The [Triggers configuration](./triggers.yaml) will create a cron that will run
 [stale.yaml](./stale.yaml) once a day at 6am EST.
 
+_The GitHub permissions are provided via the secret
+[`webhook-secret`](https://github.com/bobcatfish/catservice/blob/e88ade9c1f8224995d5c983ce13cbeb0e07fdfc2/tekton/triggers.yaml#L28-L31)._
+
 ## Prerequisites
 
 You must install into your kube cluster:
