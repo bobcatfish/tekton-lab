@@ -18,11 +18,43 @@ spec:
     command: ["bash", "-c"]
     args:
       - echo '$(inputs.params.message) $(inputs.resources.repo.revision)'
+  - name: install-hub
+    image: golang
+    script : |
+      #!/usr/bin/env bash
+      set -ex
+
+      go get github.com/github/hub
+      cp /go/bin/hub $HOME/hub
+
   - name: get-issues
-    image: jsternberg/hub
+    #image: jsternberg/hub
+    image: ubuntu
     workingDir: "$(inputs.resources.repo.path)"
-    command: ["hub"]
-    args: ["issue"]
+    script : |
+      #!/usr/bin/env bash
+      set -ex
+
+      PATH=$PATH:$HOME
+
+      echo $PWD
+      ls -la
+
+      # Get issue numbers updated since yesterday
+      YESTERDAY=$(date -d "yesterday 13:00" '+%Y-%m-%d')
+      ISSUES=$(hub issue --since="$YESTERDAY" --format="%I%n")
+      for ISSUE in $(echo $ISSUES)
+      do
+        echo "HELLO" $ISSUE
+        hub issue show $ISSUE
+      done
+
+    
+    #command: ["hub"]
+    #args:
+    #- "issue"
+    #- "-since"
+    #- "$(date -d "yesterday 13:00" '+%Y-%m-%d')"
     env:
     - name: GITHUB_TOKEN
       valueFrom:
