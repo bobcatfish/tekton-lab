@@ -1,0 +1,101 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: stale-github-cron
+spec:
+  # Every day at 6am EST aka 11am EST
+  # schedule: "0 11 * * *"
+  # For now every minute to make sure it's working
+  schedule: "* * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: hello
+            image: busybox
+            args:
+              - wget
+              - --spider
+              - el-cron-listener.default.svc.cluster.local:8080
+          restartPolicy: Never
+---
+apiVersion: tekton.dev/v1alpha1
+kind: EventListener
+metadata:
+  name: cron-listener
+spec:
+  serviceAccountName: stale-github-sa
+  triggers:
+    - name: cron-trig
+      bindings:
+      - name: stale-github-binding
+      template:
+        name: stale-github-template
+---
+apiVersion: tekton.dev/v1alpha1
+kind: TriggerBinding
+metadata:
+  name: stale-github-binding
+spec:
+  params:
+  - name: message
+    value: "hello from trigger binding"
+---
+apiVersion: tekton.dev/v1alpha1
+kind: TriggerTemplate
+metadata:
+  name: stale-github-template
+spec:
+  params:
+  - name: message
+    description: The message to print
+    default: This is the default message in the template
+  resourcetemplates:
+  - apiVersion: tekton.dev/v1alpha1
+    kind: TaskRun
+    metadata:
+      generateName: stale-github-run
+    spec:
+      taskRef:
+        name: stale-github
+      inputs:
+        params:
+        - name: message
+          value: $(params.message)
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: stale-github-role
+rules:
+# Permissions for every EventListener deployment to function
+- apiGroups: ["tekton.dev"]
+  resources: ["eventlisteners", "triggerbindings", "triggertemplates", "tasks", "taskruns"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+# Permissions to create resources in associated TriggerTemplates
+- apiGroups: ["tekton.dev"]
+  resources: ["pipelineruns", "pipelineresources", "taskruns"]
+  verbs: ["create"]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: stale-github-sa
+#secrets:
+#  - name: githubsecret
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: stale-github-role-binding
+subjects:
+- kind: ServiceAccount
+  name: stale-github-sa
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: stale-github-role
