@@ -1,0 +1,25 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Task
+metadata:
+  name: release-notes
+spec:
+  inputs:
+    params:
+    - name: message
+      description: The message to print
+      default: This is the default message
+      type: string
+    resources:
+    # gonna need:
+    # - code the pr is triggered against
+    # - code (and path) from repo with template
+    # - this repo (?) in order to run script
+    # - pull request to update
+    - name: repo
+      type: git
+  steps:
+  - name: say-message
+    image: bash
+    command: ["bash", "-c"]
+    args:
+      - echo '$(inputs.params.message)'
