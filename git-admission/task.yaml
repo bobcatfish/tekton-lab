@@ -1,0 +1,53 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Task
+metadata:
+  name: apply-policy
+spec:
+  inputs:
+    resources:
+    - name: policy-repo
+      type: git
+    - name: pull-request
+      tyep: pull-request
+    params:
+    - name: pathToPolicy
+      default: "$(inputs.resources.policy-repo.path)/git-admission/policy.rego"
+    - name: policy
+      default: "data.git.allow"
+    - name: event-body
+  steps:
+  - name: echo
+    image: busybox
+    script: |
+      #!/usr/bin/env bash
+      set -xe
+      echo $(inputs.params.event-body) > $HOME/body.json
+  - name: apply-policy
+    image: openpolicyagent/opa
+    # TODO: this literally just prints "true" or "false" right now, need to record it
+    # it wouldn't even fail yet :sweat:
+    command:
+    - eval
+    - -d
+    - $(inputs.params.pathToPolicy)
+    - $(inputs.params.policy)
+    - -i
+    - $HOME/body.json
+    - --format=pretty
+  - name: write-result
+    image: busybox
+    script: |
+      #!/usr/bin/env bash
+      set -xe
+      # TODO: this always prints the same thing, it _should_ read a value printed by the prev step
+      echo "Policy xyz was successful" > /results/policy
+    volumeMounts:
+    - name: results
+      mountPath: /results
+  volumes:
+    - name: results-pvc
+      persistentVolumeClaim:
+        claimName: results-pvc
+
+
+

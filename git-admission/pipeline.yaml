@@ -1,0 +1,25 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Pipeline
+metadata:
+  name: git-admission-control
+spec:
+  params:
+  - name: event-body
+  resources:
+  - name: pull-request
+    type: pull-request
+  - name: source-repo
+    type: git
+  tasks:
+  - name: execute-rules
+    taskRef:
+      name: execute-rules
+    params:
+    - name: event-body
+      value: $(params.event-body)
+    resources:
+      inputs:
+      - name: workspace
+        resource: source-repo
+      - name: pull-request
+        resource: pull-request
