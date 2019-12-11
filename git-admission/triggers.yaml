@@ -1,0 +1,181 @@
+apiVersion: tekton.dev/v1alpha1
+kind: TriggerTemplate
+metadata:
+  name: git-admission-triggertemplate
+spec:
+  params:
+    - name: gitrevision
+      description: The git revision
+      default: master
+    - name: gitrepositoryurl
+      description: The git repository url
+    - name: pullrequesturl
+      description: The url of the pull reuqest
+    - name: event-body
+      description: The body of the triggering request
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1alpha1
+      kind: PipelineResource
+      metadata:
+        name: pr-$(uid)
+      spec:
+        type: pullRequest
+        params:
+        - name: url
+          value: $(params.pullrequesturl)
+        secrets:
+        - secretName: webhook-secret
+          secretKey: token
+          fieldName: githubToken
+    - apiVersion: tekton.dev/v1alpha1
+      kind: PipelineResource
+      metadata:
+        name: source-repo-$(uid)
+      spec:
+        type: git
+        params:
+        - name: revision
+          value: $(params.gitrevision)
+        - name: url
+          value: $(params.gitrepositoryurl)
+    - apiVersion: tekton.dev/v1alpha1
+      kind: PipelineRun
+      metadata:
+        name: git-admission-control-$(uid)
+      spec:
+        pipelineRef:
+          name: release-notes
+        params:
+        - name: event-body
+          value: "$(params.event-body)"
+        resources:
+        - name: pull-request
+          resourceRef:
+            name: pr-$(uid)
+        - name: source-repo
+          resourceRef:
+            name: source-repo-$(uid)
+---
+apiVersion: tekton.dev/v1alpha1
+kind: TriggerBinding
+metadata:
+  name: git-admission-pipelinebinding
+spec:
+  params:
+    - name: gitrevision
+      value: $(body.pull_request.head.sha)
+    - name: gitrepositoryurl
+      value: "https://github.com/$(body.repository.full_name)"
+    - name: pullrequesturl
+      value: $(body.pull_request.html_url)
+    - name: event-body
+      value: "$(body.pull_request.body)"
+---
+apiVersion: tekton.dev/v1alpha1
+kind: EventListener
+metadata:
+  name: git-admission-listener
+spec:
+  serviceType: LoadBalancer
+  serviceAccountName: triggers-sa
+  triggers:
+    - interceptor:
+        webhook:
+          objectRef:
+            kind: Service
+            name: gh-validate
+            apiVersion: v1
+          objectRef:
+            kind: Service
+            name: gh-validate
+            apiVersion: v1
+      bindings:
+      - name: git-admission-pipelinebinding
+      template:
+        name: git-admission-triggertemplate
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gh-validate
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gh-validate
+  template:
+    metadata:
+     labels:
+        app: gh-validate
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: validate
+          image: github.com/tektoncd/triggers/cmd/gh-validate
+          env:
+            - name: GITHUB_SECRET_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: webhook-secret
+                  key: secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gh-validate
+spec:
+  type: ClusterIP
+  selector:
+    app: gh-validate
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: triggers-sa
+rules:
+- apiGroups:
+  - tekton.dev
+  resources:
+  - eventlisteners
+  - triggerbindings
+  - triggertemplates
+  - pipelineresources
+  verbs:
+  - get
+- apiGroups:
+  - tekton.dev
+  resources:
+  - taskruns
+  - pipelineruns
+  - pipelineresources
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: triggers-sa
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: triggers-sa-binding
+subjects:
+  - kind: ServiceAccount
+    name: triggers-sa
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: triggers-sa
