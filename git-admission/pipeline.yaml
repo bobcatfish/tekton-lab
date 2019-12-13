@@ -7,19 +7,37 @@ spec:
   - name: event-body
   resources:
   - name: pull-request
-    type: pull-request
-  - name: source-repo
+    type: pullRequest
+  - name: policy-repo
     type: git
   tasks:
-  - name: execute-rules
+  - name: setstatus-inprogress
     taskRef:
-      name: execute-rules
-    params:
-    - name: event-body
-      value: $(params.event-body)
+      name: set-status
     resources:
       inputs:
-      - name: workspace
-        resource: source-repo
-      - name: pull-request
+      - name: pr
         resource: pull-request
+      outputs:
+      - name: pr
+        resource: pull-request
+    params:
+    - name: status
+      value: "in_progress"
+#  - name: execute-rules
+#    runAfter: [setstatus-inprogress]
+#    taskRef:
+#      name: apply-policy
+#    params:
+#    - name: event-body
+#      value: $(params.event-body)
+#    resources:
+#      inputs:
+#      - name: policy-repo
+#        resource: policy-repo
+#      - name: pull-request
+#        resource: pull-request
+#      outputs:
+#      - name: pull-request
+#        resource: pull-request
+#

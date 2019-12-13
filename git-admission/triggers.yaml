@@ -15,46 +15,35 @@ spec:
       description: The body of the triggering request
   resourcetemplates:
     - apiVersion: tekton.dev/v1alpha1
-      kind: PipelineResource
-      metadata:
-        name: pr-$(uid)
-      spec:
-        type: pullRequest
-        params:
-        - name: url
-          value: $(params.pullrequesturl)
-        secrets:
-        - secretName: webhook-secret
-          secretKey: token
-          fieldName: githubToken
-    - apiVersion: tekton.dev/v1alpha1
-      kind: PipelineResource
-      metadata:
-        name: source-repo-$(uid)
-      spec:
-        type: git
-        params:
-        - name: revision
-          value: $(params.gitrevision)
-        - name: url
-          value: $(params.gitrepositoryurl)
-    - apiVersion: tekton.dev/v1alpha1
       kind: PipelineRun
       metadata:
         name: git-admission-control-$(uid)
       spec:
         pipelineRef:
-          name: release-notes
+          name: git-admission-control
         params:
         - name: event-body
           value: "$(params.event-body)"
         resources:
         - name: pull-request
-          resourceRef:
-            name: pr-$(uid)
-        - name: source-repo
-          resourceRef:
-            name: source-repo-$(uid)
+          resourceSpec:
+            type: pullRequest
+            params:
+            - name: url
+              value: $(params.pullrequesturl)
+            secrets:
+            - secretName: webhook-secret
+              secretKey: token
+              fieldName: githubToken
+        # TODO this is not good cuz folks can change the policy within the PR XD
+        - name: policy-repo
+          resourceSpec:
+            type: git
+            params:
+            - name: revision
+              value: $(params.gitrevision)
+            - name: url
+              value: $(params.gitrepositoryurl)
 ---
 apiVersion: tekton.dev/v1alpha1
 kind: TriggerBinding
@@ -69,7 +58,8 @@ spec:
     - name: pullrequesturl
       value: $(body.pull_request.html_url)
     - name: event-body
-      value: "$(body.pull_request.body)"
+      #value: "$(body.pull_request.body)"
+      value: "$(body)"
 ---
 apiVersion: tekton.dev/v1alpha1
 kind: EventListener

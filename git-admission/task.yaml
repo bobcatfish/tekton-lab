@@ -8,46 +8,110 @@ spec:
     - name: policy-repo
       type: git
     - name: pull-request
-      tyep: pull-request
+      type: pullRequest
     params:
     - name: pathToPolicy
       default: "$(inputs.resources.policy-repo.path)/git-admission/policy.rego"
-    - name: policy
+    - name: query
+      #default: "data.git.allow == true"
       default: "data.git.allow"
     - name: event-body
+  outputs:
+    resources:
+    - name: pull-request
+      type: pullRequest
   steps:
+  - name: set-in-porgress
+    image: ubuntu
+    script: |
+      #!/usr/bin/env bash
+      set -ex
+      cp -r /workspace/pull-request/ /workspace/output/
+      ls -laR /workspace/output/pull-request
+      cat <<EOF > /workspace/output/pull-request/status/tekton.json
+      {
+        "ID": "tekton",
+        "Code": "in_progress",
+        "Description": "Checking if you are allowed..."
+      }
+      EOF
   - name: echo
-    image: busybox
+    image: ubuntu
     script: |
       #!/usr/bin/env bash
       set -xe
       echo $(inputs.params.event-body) > $HOME/body.json
   - name: apply-policy
-    image: openpolicyagent/opa
-    # TODO: this literally just prints "true" or "false" right now, need to record it
-    # it wouldn't even fail yet :sweat:
-    command:
-    - eval
-    - -d
-    - $(inputs.params.pathToPolicy)
-    - $(inputs.params.policy)
-    - -i
-    - $HOME/body.json
-    - --format=pretty
-  - name: write-result
-    image: busybox
+    image: openpolicyagent/opa:edge-debug
+    command: ['ash']
+    args:
+    - -c
+    - |
+      set -xe
+      echo $(inputs.params.event-body) > $HOME/body.json
+      /opa eval \
+        -d $(inputs.params.pathToPolicy) \
+        "$(inputs.params.query)" \
+        -i $HOME/body.json \
+        --format=pretty > $HOME/result
+  - name: set-result
+    image: ubuntu
     script: |
       #!/usr/bin/env bash
-      set -xe
-      # TODO: this always prints the same thing, it _should_ read a value printed by the prev step
-      echo "Policy xyz was successful" > /results/policy
-    volumeMounts:
-    - name: results
-      mountPath: /results
-  volumes:
-    - name: results-pvc
-      persistentVolumeClaim:
-        claimName: results-pvc
+      set -ex
+
+      if grep -q true $HOME/result; then
+        cat <<EOF > /workspace/output/pull-request/status/tekton.json
+        {
+          "ID": "tekton",
+          "Code": "success",
+          "Description": "You are allowed!"
+        }
+      EOF
+      else
+        cat <<EOF > /workspace/output/pull-request/status/tekton.json
+        {
+          "ID": "tekton",
+          "Code": "failure",
+          "Description": "Policy says no",
+        }
+      EOF
+      fi
+---
+apiVersion: tekton.dev/v1alpha1
+kind: Task
+metadata:
+  name: set-status
+spec:
+  inputs:
+    resources:
+    - name: pr
+      type: pullRequest
+    params:
+    - name: status
+      type: string
+  outputs:
+    resources:
+    - name: pr
+      type: pullRequest
+  steps:
+  - name: set
+    image: ubuntu
+    command: ['bash']
+    args:
+    - -c
+    - |
+        set -ex
+        cp -r /workspace/pr/ /workspace/output/
+        ls -laR /workspace/output
+        cat <<EOF > /workspace/output/pr/status/poop.json
+        {
+          "Label": "poop",
+          "Code": "$(inputs.params.status)",
+          "Description": "Tekton is running"
+        }
+        EOF
+        ls -laR /workspace/output
 
 
 
