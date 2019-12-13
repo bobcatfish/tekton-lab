@@ -23,7 +23,7 @@ spec:
         resource: pull-request
     params:
     - name: status
-      value: "in_progress"
+      value: "pending"
 #  - name: execute-rules
 #    runAfter: [setstatus-inprogress]
 #    taskRef:
