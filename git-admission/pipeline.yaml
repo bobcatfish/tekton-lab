@@ -24,20 +24,3 @@ spec:
     params:
     - name: status
       value: "pending"
-#  - name: execute-rules
-#    runAfter: [setstatus-inprogress]
-#    taskRef:
-#      name: apply-policy
-#    params:
-#    - name: event-body
-#      value: $(params.event-body)
-#    resources:
-#      inputs:
-#      - name: policy-repo
-#        resource: policy-repo
-#      - name: pull-request
-#        resource: pull-request
-#      outputs:
-#      - name: pull-request
-#        resource: pull-request
-#
