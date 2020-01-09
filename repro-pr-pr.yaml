@@ -1,0 +1,14 @@
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: repro-pr-pr
+  namespace: default
+spec:
+  params:
+  - name: url
+    value: https://github.com/bobcatfish/tekton-lab/pull/4
+  secrets:
+  - fieldName: authToken
+    secretKey: token
+    secretName: webhook-secret
+  type: pullRequest
