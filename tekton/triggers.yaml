@@ -1,0 +1,123 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerTemplate
+metadata:
+  name: lab-test-triggertemplate
+spec:
+  params:
+    - name: pvc-name
+    - name: url
+    - name: secret-key-ref
+      default: webhook-secret
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        name: lab-test-pr-$(uid)
+      spec:
+        workspaces:
+        - name: pr
+          persistentVolumeClaim:
+            claimName: pvc-name
+
+        pipelineSpec:
+          workspaces:
+          - name: pr
+
+          tasks:
+          # TODO(pipeline#1986) We might be re-using a PVC so we need to make sure
+          # we erase anything on it
+          - name: clear-workspace-before
+            workspaces:
+            - name: w
+              workspace: pr
+            taskRef:
+              name: clear-workspace
+
+          # Get the starting state of the PR
+          - name: pull-request-fetch
+            runAfter: [clear-workspace-before]
+            taskRef:
+              name: pull-request
+            workspaces:
+            - name: pr
+              workspace: pr
+            params:
+            - name: mode
+              value: download
+            - name: url
+              value: $(params.url)
+            - name: provider
+              value: github
+            - name: secret-key-ref
+              value: $(params.secret-key-ref)
+
+          # Add a comment to the workspace using the current date and time to make it unique
+          - name: add-comment
+            runAfter: [pull-request-fetch]
+            workspaces:
+            - name: pr
+              workspace: pr
+            taskSpec:
+              workspaces:
+              - name: pr
+              steps:
+              - name: write-comment
+                image: ubuntu
+                script: |
+                  #!/usr/bin/env bash
+                  set -xe
+                  NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                  COMMENT="How about right now? It's $NOW"
+                  echo $COMMENT > $(workspaces.pr.path)/comments/$NOW
+
+          # Actually update the pull request with the comment
+          - name: pull-request-update
+            runAfter: [add-comment]
+            taskRef:
+              name: pull-request
+            workspaces:
+            - name: pr
+              workspace: pr
+            params:
+            - name: mode
+              value: upload
+            - name: url
+              value: $(params.url)
+            - name: provider
+              value: github
+            - name: secret-key-ref
+              value: $(params.secret-key-ref)
+
+
+---
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerBinding
+metadata:
+  name: lab-test-binding
+spec:
+  params:
+    - name: pvc-name
+      value: lab-test-storage
+    - name: url
+      value: "https://github.com/$(body.repository.full_name)"
+---
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: EventListener
+metadata:
+  name: lab-test-listener
+spec:
+  serviceType: LoadBalancer
+  serviceAccountName: tekton-triggers-example-sa
+  triggers:
+  - name: lab-test
+    bindings:
+    - name: lab-test-binding
+    template:
+      name: lab-test-triggertemplate
+    interceptors:
+      - github:
+          secretRef:
+            secretName: foo
+            secretKey: bar
+          eventTypes:
+            - pull_request
