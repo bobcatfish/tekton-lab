@@ -4,6 +4,7 @@
 
 import argparse
 import datetime
+from packaging import version
 import requests
 
 PROJS = [
@@ -21,13 +22,15 @@ class GitHub():
     
     def _get_json(self, url):
         r = requests.get(url,
-            headers={"Authorization":"token {}".format(self._token)}
+            headers={"Authorization":"token {}".format(self._token)},
+            # try to shortcut pagination b/c i am lazy
+            params={"per_page":1000},
         )
         r.raise_for_status()
         return r.json()
 
     def get_releases(self, proj):
-        return self._get_json("https://api.github.com/repos/{}/releases".format(proj))
+        return Releases(self._get_json("https://api.github.com/repos/{}/releases".format(proj)))
 
 
 def avg_date_diff(pubs):
@@ -37,17 +40,32 @@ def avg_date_diff(pubs):
     return sum(diffs, datetime.timedelta(0)) / len(diffs)
 
 
-def get_release_freqs(g, proj):
-    releases = g.get_releases(proj)
-    major, all = [], []
+class Releases():
+    def __init__(self, releases):
+        self._releases = releases
+    
+    def minor(self):
+        return [r for r in self.all() if version.parse(r['tag_name']).micro == 0]
+    
+    def patch(self):
+        return [r for r in self.all() if version.parse(r['tag_name']).micro != 0]
+    
+    def all(self):
+        # ignore pre-releases
+        return [r for r in self._releases if version.parse(r['tag_name']).pre is None]
+
+def get_release_freqs(releases):
+    pubs = []
     for r in releases:
-        pub_time = datetime.datetime.strptime(r['published_at'], "%Y-%m-%dT%H:%M:%SZ")
-        if r['tag_name'].endswith('.0'):
-            major.append(pub_time)
-        all.append(pub_time)
+        pubs.append(datetime.datetime.strptime(r['published_at'], "%Y-%m-%dT%H:%M:%SZ"))
+    return avg_date_diff(pubs)
 
-    return avg_date_diff(major), avg_date_diff(all)
-
+def minors_with_patches(releases):
+    mwp = set()
+    for r in releases.patch():
+        v = version.parse(r['tag_name'])
+        mwp.add(v.minor)
+    return len(mwp) / len(releases.minor())
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='get stats from the robocat')
@@ -57,5 +75,12 @@ if __name__ == "__main__":
     g = GitHub(args.token)
 
     for p in PROJS:
-        major, all = get_release_freqs(g, p)
-        print("{} release frequency across all is {}, between major versions is {}".format(p, all, major))
+        releases = g.get_releases(p)
+        minor = get_release_freqs(releases.minor())
+        all = get_release_freqs(releases.all())
+        mwm = minors_with_patches(releases)
+
+        print("*********** {} *************".format(p))
+        print("Release freq (all): {}".format(all))
+        print("Release freq (minor): {}".format(minor))
+        print("% minor with patch: {}".format(mwm))
