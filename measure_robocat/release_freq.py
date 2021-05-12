@@ -85,8 +85,6 @@ def time_to_patch(releases):
     return sum(diffs, datetime.timedelta(0)) / len(diffs) if len(diffs) > 0 else 0
 
 
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='get stats from the robocat')
     parser.add_argument('--token', help='github personal token for making requests')
