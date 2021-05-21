@@ -8,12 +8,7 @@ from packaging import version
 import requests
 
 PROJS = [
-    'tektoncd/pipeline',
-    'tektoncd/triggers',
-    'tektoncd/cli',
-    'tektoncd/dashboard',
-    'tektoncd/hub',
-    'tektoncd/results',
+    'tektoncd/operator',
 ]
 
 class GitHub():
@@ -44,10 +39,10 @@ class Releases():
         self._releases = [Release(r) for r in releases]
     
     def minor(self):
-        return [r for r in self.all() if r.v.micro == 0]
+        return [r for r in self.all() if r.v.post == 1]
     
     def patch(self):
-        return [r for r in self.all() if r.v.micro != 0]
+        return [r for r in self.all() if r.v.post != 1]
     
     def all(self):
         # ignore pre-releases
@@ -80,7 +75,7 @@ def time_to_patch(releases):
     diffs = []
     all_releases = releases.all()
     for i, r in enumerate(all_releases):
-        if r.v.micro != 0:
+        if r.v.post != 1:
             diffs.append(r.pub_time - all_releases[i+1].pub_time)
     return sum(diffs, datetime.timedelta(0)) / len(diffs) if len(diffs) > 0 else 0
 
